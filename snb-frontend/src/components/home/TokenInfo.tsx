@@ -8,7 +8,7 @@ export default function TokenInfo() {
   const [copied, setCopied] = useState(false);
 
   const contract =
-    "0xb44F9B20c27e535B7acf0BC5bB8c871f4125c84f";
+    "0x7cE905Eb10a94e9D6d0618A25DCDC0172Db14309";
 
   function copyAddress() {
     navigator.clipboard.writeText(contract);
