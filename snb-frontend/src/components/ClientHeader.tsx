@@ -2,7 +2,6 @@
 
 import { useState, useEffect } from "react";
 import Link from "next/link";
-import Image from "next/image";
 import { usePathname } from "next/navigation";
 import ConnectWallet from "@/components/ConnectWallet";
 import LangSwitch from "@/components/LangSwitch";
@@ -79,12 +78,11 @@ export default function ClientHeader() {
             flexShrink: 0,
           }}
         >
-          <Image
+          <img
             src="/logo.png"
             alt="SNB Logo"
             width={32}
             height={32}
-            priority
             className="logo-img"
           />
           <span className="logo-text">SNB</span>
@@ -137,48 +135,46 @@ export default function ClientHeader() {
       </div>
 
       {/* 移动端菜单 */}
-{open && (
-  <div className="nav-mobile-menu">
-    {/* ✅ 移动端菜单顶部：语言 + 钱包（始终可见） */}
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        gap: 12,
-        padding: "12px",
-        marginBottom: 12,
-        borderBottom: "1px solid #222",
-      }}
-    >
-      <LangSwitch />
-      <ConnectWallet />
-    </div>
-
-    {/* 导航列表 */}
-    <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-      {tabs.map((tab) => {
-        const active = isActive(tab.href);
-        return (
-          <Link
-            key={tab.href}
-            href={tab.href}
-            onClick={() => setOpen(false)}
+      {open && (
+        <div className="nav-mobile-menu">
+          <div
             style={{
-              padding: "10px 12px",
-              borderRadius: 12,
-              background: active ? "#facc15" : "transparent",
-              color: active ? "#000" : "#fff",
-              fontWeight: 600,
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+              gap: 12,
+              padding: "12px",
+              marginBottom: 12,
+              borderBottom: "1px solid #222",
             }}
           >
-            {t(`nav.${tab.key}`)}
-          </Link>
-        );
-      })}
-    </div>
-  </div>
-)}
+            <LangSwitch />
+            <ConnectWallet />
+          </div>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {tabs.map((tab) => {
+              const active = isActive(tab.href);
+              return (
+                <Link
+                  key={tab.href}
+                  href={tab.href}
+                  onClick={() => setOpen(false)}
+                  style={{
+                    padding: "10px 12px",
+                    borderRadius: 12,
+                    background: active ? "#facc15" : "transparent",
+                    color: active ? "#000" : "#fff",
+                    fontWeight: 600,
+                  }}
+                >
+                  {t(`nav.${tab.key}`)}
+                </Link>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </header>
   );
 }
