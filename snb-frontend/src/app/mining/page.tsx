@@ -20,15 +20,14 @@ type TxState = "idle" | "claiming" | "withdrawing" | "staking";
 const MIN_STAKE_BLOCKS = 900;
 const BLOCK_TIME_SEC = 2;
 
+/* ======================== */
 function format4(v: string) {
   const n = Number(v);
   if (isNaN(n)) return "0.0000";
   return n.toFixed(4);
 }
 
-/* ========================
-   Unified tx error handler
-======================== */
+/* ======================== */
 function showTxError(err: any, t: any) {
   switch (err?.code) {
     case 4001:
@@ -56,22 +55,21 @@ export default function MiningPage() {
   const [txState, setTxState] = useState<TxState>("idle");
   const [loading, setLoading] = useState(true);
 
+  const [stakedRaw, setStakedRaw] = useState("0"); // ⭐ 新增（避免精度坑）
   const [stakedDisplay, setStakedDisplay] = useState("0");
   const [pending, setPending] = useState("0");
-  const [lastStakeBlock, setLastStakeBlock] =
-    useState<number | null>(null);
+  const [lastStakeBlock, setLastStakeBlock] = useState<number | null>(null);
 
   const [walletLP, setWalletLP] = useState("0");
   const [stakeAmount, setStakeAmount] = useState("");
   const [unstakeAmount, setUnstakeAmount] = useState("");
 
-  const [currentBlock, setCurrentBlock] =
-    useState<number | null>(null);
+  const [currentBlock, setCurrentBlock] = useState<number | null>(null);
 
   const listeningRef = useRef(false);
 
   /* =========================
-     Load mining data
+     Reload mining state
   ========================= */
   async function reload(silent = false) {
     if (!account) {
@@ -83,6 +81,8 @@ export default function MiningPage() {
 
     try {
       const info = await loadMiningInfo(account);
+
+      setStakedRaw(info.stakedRaw);
       setStakedDisplay(info.stakedDisplay);
       setPending(info.pendingSNB);
       setLastStakeBlock(info.lastStakeBlock ?? null);
@@ -97,7 +97,7 @@ export default function MiningPage() {
   }
 
   /* =========================
-     Poll block number
+     Poll MAINNET block number
   ========================= */
   useEffect(() => {
     if (!account || !isCorrectNetwork) {
@@ -105,7 +105,7 @@ export default function MiningPage() {
       return;
     }
 
-    const provider = getReadProvider(CHAIN_ID.BSC_TESTNET);
+    const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
     if (!provider) return;
 
     let cancelled = false;
@@ -131,7 +131,7 @@ export default function MiningPage() {
   }, [account, isCorrectNetwork]);
 
   /* =========================
-     Claim (FINAL · ABI SAFE)
+     Claim reward
   ========================= */
   async function handleClaim() {
     if (txState !== "idle" || !account) return;
@@ -139,15 +139,14 @@ export default function MiningPage() {
     setTxState("claiming");
 
     try {
-      await claimReward();
+      const tx = await claimReward();
 
       toast.success(t("tx.success"));
 
       // ✅ 乐观更新
       setPending("0");
 
-      // ✅ ABI 无关的“链确认”方式：等下一个区块
-      const provider = getReadProvider(CHAIN_ID.BSC_TESTNET);
+      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
       if (!provider || listeningRef.current) return;
 
       listeningRef.current = true;
@@ -156,6 +155,8 @@ export default function MiningPage() {
         reload(true);
         listeningRef.current = false;
       });
+
+      await tx.wait();
     } catch (err: any) {
       showTxError(err, t);
     } finally {
@@ -164,7 +165,7 @@ export default function MiningPage() {
   }
 
   /* =========================
-     Stake / Withdraw（不动）
+     Stake LP
   ========================= */
   async function handleStake() {
     if (txState !== "idle") return;
@@ -180,8 +181,10 @@ export default function MiningPage() {
     }
 
     setTxState("staking");
+
     try {
       await stakeLP(stakeAmount);
+
       toast.success(t("tx.success"));
       setStakeAmount("");
       reload();
@@ -192,6 +195,9 @@ export default function MiningPage() {
     }
   }
 
+  /* =========================
+     Withdraw LP
+  ========================= */
   async function handleWithdraw() {
     if (!canUnstake || txState !== "idle") return;
 
@@ -201,8 +207,10 @@ export default function MiningPage() {
     }
 
     setTxState("withdrawing");
+
     try {
       await withdrawLP(unstakeAmount);
+
       toast.success(t("tx.success"));
       setUnstakeAmount("");
       reload();
@@ -214,7 +222,7 @@ export default function MiningPage() {
   }
 
   /* =========================
-     Unstake lock calc
+     Lock calculation (BigInt SAFE)
   ========================= */
   let canUnstake = true;
   let blocksLeft = 0;
@@ -223,12 +231,14 @@ export default function MiningPage() {
   if (
     lastStakeBlock !== null &&
     currentBlock !== null &&
-    Number(stakedDisplay) > 0
+    BigInt(stakedRaw) > 0n // ⭐ 精度安全
   ) {
     const unlockBlock = lastStakeBlock + MIN_STAKE_BLOCKS;
+
     if (currentBlock < unlockBlock) {
       canUnstake = false;
       blocksLeft = unlockBlock - currentBlock;
+
       minutesLeft = Math.ceil(
         (blocksLeft * BLOCK_TIME_SEC) / 60
       );
@@ -266,7 +276,7 @@ export default function MiningPage() {
           value={format4(walletLP)}
         />
 
-        {Number(stakedDisplay) > 0 && (
+        {BigInt(stakedRaw) > 0n && (
           <div style={{ marginTop: 8, fontSize: 13, color: "#999" }}>
             ⏳ {t("mining.unstakeRule", { blocks: MIN_STAKE_BLOCKS })}
           </div>
