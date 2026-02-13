@@ -1,0 +1,352 @@
+/* =========================
+   Global Reset
+========================= */
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  background: radial-gradient(
+    circle at top,
+    #121212,
+    #080808 70%
+  );
+  color: #fff;
+  font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont;
+
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+/* =========================
+   Layout / Container
+========================= */
+
+main,
+section {
+  overflow: visible;
+}
+
+.container {
+  max-width: 420px;
+  margin: 40px auto;
+  padding: 0 16px;
+}
+
+/* =========================
+   Header / Navigation
+========================= */
+
+.header {
+  position: sticky;
+  top: 0;
+  z-index: 50;
+  background: rgba(0, 0, 0, 0.75);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid #1f1f1f;
+}
+
+.nav-desktop {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.nav-mobile-btn {
+  display: none;
+  font-size: 22px;
+  background: none;
+  color: white;
+  border: none;
+  cursor: pointer;
+}
+
+.nav-mobile-menu {
+  display: none;
+  flex-direction: column;
+  gap: 12px;
+  padding: 16px 24px;
+  border-top: 1px solid #222;
+  background: rgba(0, 0, 0, 0.9);
+}
+
+/* =========================
+   Logo
+========================= */
+
+.logo-wrap {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  text-decoration: none;
+}
+
+.logo-img {
+  width: 32px;
+  height: 32px;
+  object-fit: contain;
+  transition: all 0.25s ease;
+}
+
+.logo-text {
+  font-weight: 900;
+  letter-spacing: 0.5px;
+  color: #fff;
+}
+
+.logo-wrap:hover .logo-img {
+  transform: scale(1.08) rotate(-2deg);
+  filter:
+    drop-shadow(0 0 6px rgba(255, 180, 0, 0.9))
+    drop-shadow(0 0 14px rgba(255, 120, 0, 0.6));
+}
+
+/* =========================
+   Card
+========================= */
+
+.card {
+  background: #0b0b0b;
+  border: 1px solid #222;
+  border-radius: 16px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.35);
+}
+
+/* =========================
+   Text
+========================= */
+
+.label {
+  font-size: 12px;
+  color: #999;
+  margin-bottom: 8px;
+}
+
+.value {
+  font-size: 22px;
+  font-weight: 700;
+}
+
+.muted {
+  color: #666;
+  font-size: 14px;
+}
+
+/* =========================
+   Inputs
+========================= */
+
+.input,
+.input-big {
+  width: 100%;
+  background: #000;
+  border: 1px solid #333;
+  border-radius: 12px;
+  color: #fff;
+  outline: none;
+}
+
+.input {
+  padding: 12px;
+  font-size: 16px;
+}
+
+.input-big {
+  font-size: 24px;
+  border: none;
+}
+
+/* =========================
+   Buttons
+========================= */
+
+.btn {
+  width: 100%;
+  padding: 12px;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f0b90b, #ffcc33);
+  color: #000;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 20px rgba(240, 185, 11, 0.4);
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* =========================
+   Grid
+========================= */
+
+.grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+/* =========================
+   Toast / Message  ⭐ 关键修复区
+========================= */
+
+.toast-mask {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+}
+
+/* Toast 主体 */
+.toast {
+  min-width: 260px;
+  max-width: 90%;
+  padding: 16px 18px;
+  border-radius: 14px;
+
+  background: rgba(15, 15, 15, 0.95);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+
+  color: #fff;
+  font-size: 14px;
+  line-height: 1.5;
+  text-align: center;
+
+  box-shadow:
+    0 10px 30px rgba(0, 0, 0, 0.65),
+    0 0 0 1px rgba(255,255,255,0.05);
+}
+
+/* 成功 */
+.toast.success {
+  border-color: rgba(34, 197, 94, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(34,197,94,0.6),
+    0 0 24px rgba(34,197,94,0.35);
+}
+
+/* 错误 */
+.toast.error {
+  border-color: rgba(239, 68, 68, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(239,68,68,0.6),
+    0 0 24px rgba(239,68,68,0.35);
+}
+
+/* 提示 */
+.toast.info {
+  border-color: rgba(250, 204, 21, 0.6);
+  box-shadow:
+    0 0 0 1px rgba(250,204,21,0.6),
+    0 0 24px rgba(250,204,21,0.35);
+}
+
+/* =========================
+   Global Glow Helpers
+========================= */
+
+.glow-layer {
+  position: absolute;
+  inset: -40px;
+  pointer-events: none;
+  filter: blur(48px);
+  opacity: 0.9;
+}
+
+/* =========================
+   Responsive
+========================= */
+
+@media (max-width: 768px) {
+  .logo-text {
+    display: none;
+  }
+
+  .nav-desktop {
+    display: none !important;
+  }
+
+  .nav-mobile-btn {
+    display: block;
+  }
+
+  .nav-mobile-menu {
+    display: flex;
+  }
+}
+
+/* =========================
+   GetStarted – Entry Cards
+========================= */
+
+.gs-entry-card {
+  display: block;
+  padding: 28px 26px;
+  border-radius: 18px;
+  background: #0b0b0b;
+  color: #fff;
+  text-decoration: none;
+
+  border: 1px solid rgba(255,255,255,0.18);
+
+  box-shadow:
+    0 0 0 1px rgba(255,255,255,0.08),
+    0 8px 24px rgba(0,0,0,0.8);
+
+  transition: transform 0.25s ease;
+}
+
+.gs-entry-card + .gs-entry-card {
+  margin-top: 24px;
+}
+
+.gs-entry-card.zap {
+  box-shadow:
+    0 0 0 1px rgba(250,204,21,0.7),
+    0 0 28px rgba(250,204,21,0.5);
+}
+
+.gs-entry-card.mining {
+  box-shadow:
+    0 0 0 1px rgba(250,204,21,1),
+    0 0 42px rgba(250,204,21,0.75);
+}
+
+.gs-entry-card.stats {
+  box-shadow:
+    0 0 0 1px rgba(139,92,246,0.9),
+    0 0 32px rgba(139,92,246,0.6);
+}
+
+@media (hover: hover) {
+  .gs-entry-card:hover {
+    transform: translateY(-2px);
+  }
+}
+
+@media (hover: none) {
+  .gs-entry-card:active {
+    transform: scale(0.97);
+  }
+}

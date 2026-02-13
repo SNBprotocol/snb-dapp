@@ -1,0 +1,19 @@
+# node
+node_modules/
+
+# env files
+.env
+.env.local
+.env.*.local
+
+# next build
+.next
+.vercel
+
+# hardhat
+artifacts/
+cache/
+
+# system
+.DS_Store
+Thumbs.db

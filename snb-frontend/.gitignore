@@ -1,0 +1,11 @@
+# dependencies
+node_modules
+
+# next build
+.next
+
+# vercel
+.vercel
+
+# env files
+.env*
