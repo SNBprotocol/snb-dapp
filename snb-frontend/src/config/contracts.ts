@@ -31,41 +31,41 @@ export const CONTRACTS: Record<
 > = {
     [CHAIN_ID.BSC_MAINNET]: {
     LP_MINING: {
-      address: "0x2Ceba93C7e33b5F1820b395E7DbF751bE41D0289",
-      startBlock: 80761212,
+      address: "0x7805b595401F8F369BdD22bDF7840155418cB179",
+      startBlock: 80981906,
     },
 
     LIQUIDITY_ZAP: {
-      address: "0x4e07e31F5f5342A4476f1D4843314667b8D7906E",
+      address: "0x37fd54d7423Ad1F4D7C9Cb171F5763306E079F2B",
     },
 
     LIQUIDITY_ZAP_STAKE: {
-      address: "0x4e07e31F5f5342A4476f1D4843314667b8D7906E",
+      address: "0x37fd54d7423Ad1F4D7C9Cb171F5763306E079F2B",
     },
 
     FEE_DISTRIBUTOR: {
-      address: "0x786c20A4ed28D863BA6aB66a6b45bf886aE80021",
+      address: "0x1De20143F41d9e04da584BC456Ea3DB3B317CD25",
     },
 
     REWARD_DISTRIBUTOR: {
-      address: "0x538F78F7243490429651ae305F4255702064B06d",
+      address: "0x61cebDb9590371fdB41Fe20ccF52Af40d26262E4",
     },
 
     REFERRAL: {
-      address: "0xf688e60F221c3381454C4b78142d6D80AF76c1D2",
+      address: "0xa40A2e0FaD674D49c50E920EC6b5eD78F51510a5",
     },
 
     REWARD_POOL: {
-      address: "0x0000000000000000000000000000000000000000",
+      address: "0x61cebDb9590371fdB41Fe20ccF52Af40d26262E4",
     },
 
     REFERRAL_REGISTRY: {
-      address: "0xf688e60F221c3381454C4b78142d6D80AF76c1D2",
-      startBlock: 80752405,
+      address: "0xa40A2e0FaD674D49c50E920EC6b5eD78F51510a5",
+      startBlock: 80981906,
     },
 
     SNB_LP: {
-      address: "0xa364DDA569CfA4eDB9288ff065670997C77a5332",
+      address: "0x6dC848c5A7c7Bc010496C3086a201Ab95850E2EF",
     },
   },
 

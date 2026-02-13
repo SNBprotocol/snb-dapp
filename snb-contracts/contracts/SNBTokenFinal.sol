@@ -12,121 +12,136 @@ contract SNBTokenFinal is ERC20, Ownable {
 
     uint256 public constant TOTAL_SUPPLY = 100_000_000 * 1e18;
 
-    uint256 public taxRate = 5; // 5%
+    // 🔒 税率写死 5%
+    uint256 public constant taxRate = 5;
+
+    // ================= Core Addresses =================
+
     address public feeDistributor;
 
-    // ================= 白名单 =================
-    // Router / Zap / 系统合约
+    // 只能设置一次标记
+    bool public feeDistributorInitialized;
+    bool public dexPairInitialized;
+    bool public rewardDistributorInitialized;
+    bool public excludedInitialized;
+
+    // ================= Whitelist =================
+
     mapping(address => bool) public isExcludedFromTax;
 
-    // ✅ 新增：推荐奖励 / 系统奖励直通白名单
+    // 推荐奖励直通
     mapping(address => bool) public isRewardDistributor;
 
-    // ================= DEX Pair =================
+    // DEX Pair（买卖判断）
     mapping(address => bool) public isDexPair;
 
-    constructor(
-        address _feeDistributor,
-        address _owner
-    ) ERC20("SNB", "SNB") Ownable(_owner) {
-        feeDistributor = _feeDistributor;
-
+    constructor(address _owner)
+        ERC20("SNB", "SNB")
+        Ownable(_owner)
+    {
         _mint(_owner, TOTAL_SUPPLY);
 
         // 默认免税
         isExcludedFromTax[_owner] = true;
-        isExcludedFromTax[_feeDistributor] = true;
         isExcludedFromTax[address(this)] = true;
     }
 
-    /* ================= Admin ================= */
+    /* =====================================================
+                        ONE-TIME CONFIG
+    ===================================================== */
 
     function setFeeDistributor(address _fd) external onlyOwner {
+        require(!feeDistributorInitialized, "FD already set");
+        require(_fd != address(0), "zero");
+
         feeDistributor = _fd;
         isExcludedFromTax[_fd] = true;
+
+        feeDistributorInitialized = true;
     }
 
-    function setExcluded(address account, bool excluded) external onlyOwner {
-        isExcludedFromTax[account] = excluded;
+    function setDexPair(address pair) external onlyOwner {
+        require(!dexPairInitialized, "pair already set");
+        require(pair != address(0), "zero");
+
+        isDexPair[pair] = true;
+        dexPairInitialized = true;
     }
 
-    /// ✅ 新增：设置推荐奖励分发合约（RewardDistributor）
-    function setRewardDistributor(address distributor, bool enabled)
+    function setRewardDistributor(address distributor)
         external
         onlyOwner
     {
-        isRewardDistributor[distributor] = enabled;
+        require(!rewardDistributorInitialized, "reward already set");
+        require(distributor != address(0), "zero");
 
-        // 推荐奖励合约默认免税
-        isExcludedFromTax[distributor] = enabled;
+        isRewardDistributor[distributor] = true;
+        isExcludedFromTax[distributor] = true;
+
+        rewardDistributorInitialized = true;
     }
 
-    /// 设置 / 取消 DEX Pair（如 SNB/WBNB）
-    function setDexPair(address pair, bool enabled) external onlyOwner {
-        isDexPair[pair] = enabled;
+    function setExcluded(address account)
+        external
+        onlyOwner
+    {
+        require(!excludedInitialized, "excluded locked");
+        require(account != address(0), "zero");
+
+        isExcludedFromTax[account] = true;
+        excludedInitialized = true;
     }
 
-    /// 可调税率（≤10%）
-    function setTaxRate(uint256 _rate) external onlyOwner {
-        require(_rate <= 10, "tax too high");
-        taxRate = _rate;
-    }
+    /* =====================================================
+                            CORE LOGIC
+    ===================================================== */
 
-    /* ================= Core ================= */
-
-    /**
-     * @dev OZ v5 hook
-     * Called on EVERY balance update
-     */
     function _update(
         address from,
         address to,
         uint256 amount
     ) internal override {
 
-        // ================= ① mint / burn =================
+        // mint / burn
         if (from == address(0) || to == address(0)) {
             super._update(from, to, amount);
             return;
         }
 
-        // ================= ② 推荐奖励直通通道（🔥关键修复） =================
-        // RewardDistributor → 用户
+        // 推荐奖励直通
         if (isRewardDistributor[from]) {
             super._update(from, to, amount);
             return;
         }
 
-        // ================= ③ 白名单不收税 =================
+        // 白名单免税
         if (isExcludedFromTax[from] || isExcludedFromTax[to]) {
             super._update(from, to, amount);
             return;
         }
 
-        // ================= ④ DEX 买 / 卖判断 =================
+        // DEX 买卖判断
         bool isBuy  = isDexPair[from];
         bool isSell = isDexPair[to];
 
-        // 普通转账：不收税
+        // 普通转账不收税
         if (!isBuy && !isSell) {
             super._update(from, to, amount);
             return;
         }
 
-        // ================= ⑤ DEX 交易：收税 =================
+        // 交易收税
         uint256 tax = (amount * taxRate) / 100;
         uint256 sendAmount = amount - tax;
 
-        // 扣税 → FeeDistributor
-        if (tax > 0) {
+        if (tax > 0 && feeDistributor != address(0)) {
             super._update(from, feeDistributor, tax);
         }
 
-        // 正常转账
         super._update(from, to, sendAmount);
 
-        // 仅在卖出时通知 FeeDistributor
-        if (isSell && tax > 0) {
+        // 仅卖出触发分发
+        if (isSell && tax > 0 && feeDistributor != address(0)) {
             IFeeDistributor(feeDistributor).distribute(from);
         }
     }
