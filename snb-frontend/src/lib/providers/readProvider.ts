@@ -48,34 +48,27 @@ function markRpcFailed(url: string) {
  * 获取只读 Provider（终极版）
  */
 export function getReadProvider(
-  chainId: number
+  chainId: number,
+  forceNew = false
 ): JsonRpcProvider | null {
-  // ♻️ 优先使用缓存
-  if (providerCache.has(chainId)) {
+
+  if (!forceNew && providerCache.has(chainId)) {
     return providerCache.get(chainId)!;
   }
 
   const urls = RPC_URLS[chainId];
   if (!urls || urls.length === 0) return null;
 
-  // 选一个当前未熔断的 RPC
   const url = urls.find(isRpcAvailable);
-  if (!url) {
-    console.warn(
-      `[readProvider] all RPCs temporarily disabled for chain ${chainId}`
-    );
-    return null;
-  }
+  if (!url) return null;
 
   const provider = new JsonRpcProvider(url, chainId, {
     staticNetwork: true,
   });
 
-  // ⚠️ 关键：warm-up + 熔断保护
   provider
     .getBlockNumber()
     .catch(() => {
-      console.warn(`[readProvider] RPC failed, circuit open: ${url}`);
       markRpcFailed(url);
       providerCache.delete(chainId);
     });
