@@ -33,14 +33,29 @@ export type ReferralRewardStats = {
 };
 
 /* =========================
-   Cache (referral network only)
+   Referral Network Cache
 ========================= */
 
 const CACHE_TTL = 30_000;
 const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
-const LOG_CHUNK_SIZE = 5000; // 更安全的 chunk 大小
+const LOG_CHUNK_SIZE = 5000;
+const LOOKBACK_BLOCKS = 200_000;
+
+/* =========================
+   Referral Reward Incremental Cache
+========================= */
+
+type RewardCacheItem = {
+  lastScannedBlock: number;
+  total: bigint;
+  level1: bigint;
+  level2: bigint;
+  history: ReferralRewardHistoryItem[];
+};
+
+const referralRewardCache = new Map<string, RewardCacheItem>();
 
 /* =========================
    Helpers
@@ -76,8 +91,7 @@ export async function loadReferral(
 
   const task = (async () => {
     try {
-      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET, true);
-
+      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
       if (!provider) return empty();
 
       const chainId = await getActiveChainId(provider);
@@ -128,7 +142,7 @@ export async function loadReferral(
 }
 
 /* =========================
-   Bind referrer (tx)
+   Bind referrer
 ========================= */
 
 export async function bindReferrer(referrer: string) {
@@ -155,7 +169,7 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================================================
-   Referral reward stats (FINAL STABLE VERSION)
+   Referral reward stats (INCREMENTAL STABLE VERSION)
 ========================================================= */
 
 export async function loadReferralRewardsFinal(
@@ -164,6 +178,8 @@ export async function loadReferralRewardsFinal(
   if (!ethers.isAddress(user)) {
     return { total: 0n, level1: 0n, level2: 0n, history: [] };
   }
+
+  const key = user.toLowerCase();
 
   const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
   if (!provider) {
@@ -184,19 +200,42 @@ export async function loadReferralRewardsFinal(
   const topic0 = eventFragment.topicHash;
 
   const latest = await provider.getBlockNumber();
-
   const startBlock =
     getContractStartBlock(chainId, "REWARD_DISTRIBUTOR") ?? latest;
 
-  let from = startBlock;
-
-  let total = 0n;
-  let level1 = 0n;
-  let level2 = 0n;
-
-  const history: ReferralRewardHistoryItem[] = [];
-
   const paddedUser = ethers.zeroPadValue(user, 32);
+
+  // 读取缓存
+  let cacheItem = referralRewardCache.get(key);
+
+  let from: number;
+
+  if (!cacheItem) {
+    // 首次加载
+    from = Math.max(startBlock, latest - LOOKBACK_BLOCKS);
+
+    cacheItem = {
+      lastScannedBlock: from - 1,
+      total: 0n,
+      level1: 0n,
+      level2: 0n,
+      history: [],
+    };
+
+    referralRewardCache.set(key, cacheItem);
+  } else {
+    // 增量扫描
+    from = cacheItem.lastScannedBlock + 1;
+  }
+
+  if (from > latest) {
+    return {
+      total: cacheItem.total,
+      level1: cacheItem.level1,
+      level2: cacheItem.level2,
+      history: cacheItem.history.slice(0, 20),
+    };
+  }
 
   while (from <= latest) {
     const to = Math.min(from + LOG_CHUNK_SIZE - 1, latest);
@@ -216,12 +255,12 @@ export async function loadReferralRewardsFinal(
           const amount = e.args.amount as bigint;
           const level = Number(e.args.level);
 
-          total += amount;
+          cacheItem.total += amount;
 
-          if (level === 1) level1 += amount;
-          if (level === 2) level2 += amount;
+          if (level === 1) cacheItem.level1 += amount;
+          if (level === 2) cacheItem.level2 += amount;
 
-          history.push({
+          cacheItem.history.unshift({
             user,
             amount,
             level,
@@ -236,18 +275,18 @@ export async function loadReferralRewardsFinal(
     from = to + 1;
   }
 
+  cacheItem.lastScannedBlock = latest;
+
   return {
-    total,
-    level1,
-    level2,
-    history: history
-      .sort((a, b) => b.blockNumber - a.blockNumber)
-      .slice(0, 20),
+    total: cacheItem.total,
+    level1: cacheItem.level1,
+    level2: cacheItem.level2,
+    history: cacheItem.history.slice(0, 20),
   };
 }
 
 /* =========================
-   Manual cache reset
+   Manual reset
 ========================= */
 
 export function resetReferralCache(user?: string) {
@@ -255,8 +294,10 @@ export function resetReferralCache(user?: string) {
     const key = user.toLowerCase();
     cache.delete(key);
     inFlight.delete(key);
+    referralRewardCache.delete(key);
   } else {
     cache.clear();
     inFlight.clear();
+    referralRewardCache.clear();
   }
 }
