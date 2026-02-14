@@ -49,6 +49,7 @@ export const CONTRACTS: Record<
 
     REWARD_DISTRIBUTOR: {
       address: "0x61cebDb9590371fdB41Fe20ccF52Af40d26262E4",
+      startBlock: 80982904,
     },
 
     REFERRAL: {
