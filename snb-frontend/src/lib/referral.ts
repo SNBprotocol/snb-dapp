@@ -76,7 +76,8 @@ export async function loadReferral(
 
   const task = (async () => {
     try {
-      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
+      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET, true);
+
       if (!provider) return empty();
 
       const chainId = await getActiveChainId(provider);
