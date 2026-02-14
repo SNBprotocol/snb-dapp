@@ -10,8 +10,8 @@ export const RPC_URLS: Record<number, string[]> = {
   ],
 
   [CHAIN_ID.BSC_MAINNET]: [
-    "https://rpc.ankr.com/bsc",
     "https://bsc.publicnode.com",
     "https://bsc-dataseed.binance.org",
+    "https://bsc-dataseed1.binance.org",
   ],
 };
