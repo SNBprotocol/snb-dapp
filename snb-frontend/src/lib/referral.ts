@@ -153,7 +153,7 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================================================
-   Referral reward stats (NO localStorage version)
+   Referral reward stats (STABLE VERSION · CHAIN SCAN)
 ========================================================= */
 
 export async function loadReferralRewardsFinal(
@@ -178,6 +178,8 @@ export async function loadReferralRewardsFinal(
   );
 
   const iface = contract.interface;
+
+  const eventFragment = iface.getEvent("ReferralReward");
   const topic = iface.getEvent("ReferralReward").topicHash;
 
   const latest = await provider.getBlockNumber();
@@ -185,7 +187,7 @@ export async function loadReferralRewardsFinal(
   const startBlock =
     getContractStartBlock(chainId, "REWARD_DISTRIBUTOR") ?? 0;
 
-  let from = Math.max(startBlock, latest - SAFE_LOOKBACK);
+  let from = startBlock; // 🔥 从部署区块开始扫，不再 lookback
 
   let total = 0n;
   let level1 = 0n;
@@ -200,39 +202,40 @@ export async function loadReferralRewardsFinal(
     try {
       logs = await provider.getLogs({
         address: distributor,
-        topics: [topic],
+        topics: [
+          topic,
+          ethers.zeroPadValue(user, 32), // ✅ 只匹配 indexed referrer
+        ],
         fromBlock: from,
         toBlock: to,
       });
-    } catch {
+    } catch (err) {
+      console.warn("[referral] log chunk failed", err);
       from = to + 1;
       continue;
     }
 
     for (const log of logs) {
-      const e = iface.parseLog(log);
+      try {
+        const e = iface.parseLog(log);
 
-      const rewarded = Object.values(e.args).some(
-        (v) =>
-          typeof v === "string" &&
-          v.toLowerCase() === user.toLowerCase()
-      );
+        const amount = e.args.amount as bigint;
+        const level = Number(e.args.level);
 
-      if (!rewarded) continue;
+        total += amount;
 
-      const amount = e.args.amount as bigint;
-      const level = Number(e.args.level);
+        if (level === 1) level1 += amount;
+        if (level === 2) level2 += amount;
 
-      total += amount;
-      if (level === 1) level1 += amount;
-      if (level === 2) level2 += amount;
-
-      history.push({
-        user,
-        amount,
-        level,
-        blockNumber: log.blockNumber,
-      });
+        history.push({
+          user,
+          amount,
+          level,
+          blockNumber: log.blockNumber,
+        });
+      } catch {
+        continue;
+      }
     }
 
     from = to + 1;
@@ -244,9 +247,10 @@ export async function loadReferralRewardsFinal(
     level2,
     history: history
       .sort((a, b) => b.blockNumber - a.blockNumber)
-      .slice(0, 10),
+      .slice(0, 20), // 保留最近20条
   };
 }
+
 
 /* =========================
    Manual cache reset (memory only)
