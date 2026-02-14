@@ -40,8 +40,7 @@ const CACHE_TTL = 30_000;
 const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
-const LOG_CHUNK_SIZE = 10_000;
-const SAFE_LOOKBACK = 120_000;
+const LOG_CHUNK_SIZE = 5000; // 更安全的 chunk 大小
 
 /* =========================
    Helpers
@@ -57,7 +56,7 @@ async function getActiveChainId(provider: any): Promise<number> {
 }
 
 /* =========================
-   Load referral (cached in memory)
+   Load referral network
 ========================= */
 
 export async function loadReferral(
@@ -80,7 +79,6 @@ export async function loadReferral(
       const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
       if (!provider) return empty();
 
-      await provider.getBlockNumber();
       const chainId = await getActiveChainId(provider);
 
       const registry = new Contract(
@@ -97,9 +95,11 @@ export async function loadReferral(
 
       const rawLevel1: string[] =
         await registry.getDirectReferrals(user);
+
       const level1 = rawLevel1.map(getAddress);
 
       const level2: string[] = [];
+
       for (const addr of level1) {
         try {
           const subs: string[] =
@@ -112,6 +112,7 @@ export async function loadReferral(
 
       const result: ReferralData = { referrer, level1, level2 };
       cache.set(key, { data: result, at: Date.now() });
+
       return result;
     } catch (e) {
       console.warn("[referral] loadReferral failed", e);
@@ -153,7 +154,7 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================================================
-   Referral reward stats (STABLE VERSION · CHAIN SCAN)
+   Referral reward stats (FINAL STABLE VERSION)
 ========================================================= */
 
 export async function loadReferralRewardsFinal(
@@ -178,16 +179,15 @@ export async function loadReferralRewardsFinal(
   );
 
   const iface = contract.interface;
-
   const eventFragment = iface.getEvent("ReferralReward");
-  const topic = iface.getEvent("ReferralReward").topicHash;
+  const topic0 = eventFragment.topicHash;
 
   const latest = await provider.getBlockNumber();
 
   const startBlock =
-    getContractStartBlock(chainId, "REWARD_DISTRIBUTOR") ?? 0;
+    getContractStartBlock(chainId, "REWARD_DISTRIBUTOR") ?? latest;
 
-  let from = startBlock; // 🔥 从部署区块开始扫，不再 lookback
+  let from = startBlock;
 
   let total = 0n;
   let level1 = 0n;
@@ -195,47 +195,41 @@ export async function loadReferralRewardsFinal(
 
   const history: ReferralRewardHistoryItem[] = [];
 
+  const paddedUser = ethers.zeroPadValue(user, 32);
+
   while (from <= latest) {
     const to = Math.min(from + LOG_CHUNK_SIZE - 1, latest);
 
-    let logs;
     try {
-      logs = await provider.getLogs({
+      const logs = await provider.getLogs({
         address: distributor,
-        topics: [
-          topic,
-          ethers.zeroPadValue(user, 32), // ✅ 只匹配 indexed referrer
-        ],
+        topics: [topic0, paddedUser],
         fromBlock: from,
         toBlock: to,
       });
-    } catch (err) {
-      console.warn("[referral] log chunk failed", err);
-      from = to + 1;
-      continue;
-    }
 
-    for (const log of logs) {
-      try {
-        const e = iface.parseLog(log);
+      for (const log of logs) {
+        try {
+          const e = iface.parseLog(log);
 
-        const amount = e.args.amount as bigint;
-        const level = Number(e.args.level);
+          const amount = e.args.amount as bigint;
+          const level = Number(e.args.level);
 
-        total += amount;
+          total += amount;
 
-        if (level === 1) level1 += amount;
-        if (level === 2) level2 += amount;
+          if (level === 1) level1 += amount;
+          if (level === 2) level2 += amount;
 
-        history.push({
-          user,
-          amount,
-          level,
-          blockNumber: log.blockNumber,
-        });
-      } catch {
-        continue;
+          history.push({
+            user,
+            amount,
+            level,
+            blockNumber: log.blockNumber,
+          });
+        } catch {}
       }
+    } catch (err) {
+      console.warn("[referral] chunk skipped", err);
     }
 
     from = to + 1;
@@ -247,13 +241,12 @@ export async function loadReferralRewardsFinal(
     level2,
     history: history
       .sort((a, b) => b.blockNumber - a.blockNumber)
-      .slice(0, 20), // 保留最近20条
+      .slice(0, 20),
   };
 }
 
-
 /* =========================
-   Manual cache reset (memory only)
+   Manual cache reset
 ========================= */
 
 export function resetReferralCache(user?: string) {
