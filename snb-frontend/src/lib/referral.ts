@@ -41,10 +41,10 @@ const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
 const LOG_CHUNK_SIZE = 5000;
-const LOOKBACK_BLOCKS = 120_000; // ⭐ 控制在 RPC 安全范围内
+const LOOKBACK_BLOCKS = 120_000;
 
 /* =========================
-   Referral Reward Incremental Cache
+   Reward Persistent Cache
 ========================= */
 
 type RewardCacheItem = {
@@ -56,6 +56,65 @@ type RewardCacheItem = {
 };
 
 const referralRewardCache = new Map<string, RewardCacheItem>();
+
+/* =========================
+   localStorage helpers
+========================= */
+
+function getStorageKey(chainId: number, user: string) {
+  return `snb_referral_reward_${chainId}_${user.toLowerCase()}`;
+}
+
+function saveToStorage(
+  chainId: number,
+  user: string,
+  item: RewardCacheItem
+) {
+  if (typeof window === "undefined") return;
+
+  const serializable = {
+    lastScannedBlock: item.lastScannedBlock,
+    total: item.total.toString(),
+    level1: item.level1.toString(),
+    level2: item.level2.toString(),
+    history: item.history.map((h) => ({
+      ...h,
+      amount: h.amount.toString(),
+    })),
+  };
+
+  localStorage.setItem(
+    getStorageKey(chainId, user),
+    JSON.stringify(serializable)
+  );
+}
+
+function loadFromStorage(
+  chainId: number,
+  user: string
+): RewardCacheItem | null {
+  if (typeof window === "undefined") return null;
+
+  const raw = localStorage.getItem(getStorageKey(chainId, user));
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw);
+
+    return {
+      lastScannedBlock: parsed.lastScannedBlock,
+      total: BigInt(parsed.total),
+      level1: BigInt(parsed.level1),
+      level2: BigInt(parsed.level2),
+      history: parsed.history.map((h: any) => ({
+        ...h,
+        amount: BigInt(h.amount),
+      })),
+    };
+  } catch {
+    return null;
+  }
+}
 
 /* =========================
    Helpers
@@ -169,7 +228,7 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================================================
-   Referral reward stats (FINAL PRODUCTION VERSION)
+   Referral reward stats (PERSISTENT INCREMENTAL VERSION)
 ========================================================= */
 
 export async function loadReferralRewardsFinal(
@@ -178,8 +237,6 @@ export async function loadReferralRewardsFinal(
   if (!ethers.isAddress(user)) {
     return { total: 0n, level1: 0n, level2: 0n, history: [] };
   }
-
-  const key = user.toLowerCase();
 
   const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
   if (!provider) {
@@ -204,12 +261,15 @@ export async function loadReferralRewardsFinal(
 
   const paddedUser = ethers.zeroPadValue(user, 32);
 
-  let cacheItem = referralRewardCache.get(key);
+  const key = user.toLowerCase();
+
+  let cacheItem =
+    referralRewardCache.get(key) ||
+    loadFromStorage(chainId, user);
 
   let from: number;
 
   if (!cacheItem) {
-    // ⭐ 首次只扫最近 LOOKBACK_BLOCKS
     const safeStart = Math.max(startBlock, latest - LOOKBACK_BLOCKS);
 
     cacheItem = {
@@ -223,6 +283,7 @@ export async function loadReferralRewardsFinal(
     referralRewardCache.set(key, cacheItem);
     from = safeStart;
   } else {
+    referralRewardCache.set(key, cacheItem);
     from = cacheItem.lastScannedBlock + 1;
   }
 
@@ -266,14 +327,14 @@ export async function loadReferralRewardsFinal(
           });
         } catch {}
       }
-    } catch {
-      // ⭐ 不再 console.warn，彻底干净
-    }
+    } catch {}
 
     from = to + 1;
   }
 
   cacheItem.lastScannedBlock = latest;
+
+  saveToStorage(chainId, user, cacheItem);
 
   return {
     total: cacheItem.total,
