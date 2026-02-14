@@ -41,7 +41,7 @@ const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
 const LOG_CHUNK_SIZE = 5000;
-const LOOKBACK_BLOCKS = 200_000;
+const LOOKBACK_BLOCKS = 120_000; // ⭐ 控制在 RPC 安全范围内
 
 /* =========================
    Referral Reward Incremental Cache
@@ -169,7 +169,7 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================================================
-   Referral reward stats (INCREMENTAL STABLE VERSION)
+   Referral reward stats (FINAL PRODUCTION VERSION)
 ========================================================= */
 
 export async function loadReferralRewardsFinal(
@@ -196,8 +196,7 @@ export async function loadReferralRewardsFinal(
   );
 
   const iface = contract.interface;
-  const eventFragment = iface.getEvent("ReferralReward");
-  const topic0 = eventFragment.topicHash;
+  const topic0 = iface.getEvent("ReferralReward").topicHash;
 
   const latest = await provider.getBlockNumber();
   const startBlock =
@@ -205,17 +204,16 @@ export async function loadReferralRewardsFinal(
 
   const paddedUser = ethers.zeroPadValue(user, 32);
 
-  // 读取缓存
   let cacheItem = referralRewardCache.get(key);
 
   let from: number;
 
   if (!cacheItem) {
-    // 首次加载
-    from = Math.max(startBlock, latest - LOOKBACK_BLOCKS);
+    // ⭐ 首次只扫最近 LOOKBACK_BLOCKS
+    const safeStart = Math.max(startBlock, latest - LOOKBACK_BLOCKS);
 
     cacheItem = {
-      lastScannedBlock: from - 1,
+      lastScannedBlock: safeStart - 1,
       total: 0n,
       level1: 0n,
       level2: 0n,
@@ -223,8 +221,8 @@ export async function loadReferralRewardsFinal(
     };
 
     referralRewardCache.set(key, cacheItem);
+    from = safeStart;
   } else {
-    // 增量扫描
     from = cacheItem.lastScannedBlock + 1;
   }
 
@@ -268,8 +266,8 @@ export async function loadReferralRewardsFinal(
           });
         } catch {}
       }
-    } catch (err) {
-      console.warn("[referral] chunk skipped", err);
+    } catch {
+      // ⭐ 不再 console.warn，彻底干净
     }
 
     from = to + 1;
