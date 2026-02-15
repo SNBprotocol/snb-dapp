@@ -10,7 +10,7 @@ export const metadata: Metadata = {
   description:
     "SNB is a transparent on-chain mining protocol with integrated Zap entry on BSC.",
   applicationName: "SNB",
-  metadataBase: new URL("https://snb-dapp.pages.dev"),
+  metadataBase: new URL("https://snbprotocol.com/"),
   openGraph: {
     title: "SNB Protocol",
     description:
