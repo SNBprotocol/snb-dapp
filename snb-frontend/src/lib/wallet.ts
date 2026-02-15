@@ -18,14 +18,6 @@ export interface ConnectResult {
 let connecting = false;
 
 /* =========================
-   iOS 判断
-========================= */
-function isIOS() {
-  if (typeof navigator === "undefined") return false;
-  return /iPhone|iPad|iPod/i.test(navigator.userAgent);
-}
-
-/* =========================
    sleep
 ========================= */
 function sleep(ms: number) {
@@ -78,7 +70,7 @@ async function waitForAccounts(
 }
 
 /* =========================================================
-   ✅ connectWallet（主网稳定版）
+   ✅ connectWallet（终极稳定版）
 ========================================================= */
 export async function connectWallet(): Promise<ConnectResult> {
   if (connecting) {
@@ -92,79 +84,78 @@ export async function connectWallet(): Promise<ConnectResult> {
   connecting = true;
 
   try {
-    /* =========================
-       🟦 iOS → WalletConnect
-    ========================== */
-    if (isIOS()) {
-      const { signer } = await getWCSigner();
+    /* =====================================================
+       🔥 优先使用 injected provider（所有端都适用）
+    ====================================================== */
+    if (window.ethereum) {
+      console.log("[wallet] using injected provider");
 
-      const account = await signer.getAddress();
-      const network = await signer.provider.getNetwork();
+      // 1️⃣ 请求授权
+      await withTimeout(
+        window.ethereum.request({
+          method: "eth_requestAccounts",
+        }),
+        10_000
+      );
+
+      // 2️⃣ 等 accounts 真正 ready
+      const accounts = await waitForAccounts();
+      const account = accounts[0];
+
+      // 3️⃣ 当前链
+      const hexChainId: string = await window.ethereum.request({
+        method: "eth_chainId",
+      });
+
+      let currentChainId = parseInt(hexChainId, 16);
+
+      /* =========================
+         🎯 目标链：BSC 主网
+      ========================== */
+      const targetChainId = CHAIN_ID.BSC_MAINNET;
+      const targetParams = NETWORK_PARAMS[targetChainId];
+
+      // 4️⃣ 如有必要，切链
+      if (currentChainId !== targetChainId) {
+        try {
+          await window.ethereum.request({
+            method: "wallet_switchEthereumChain",
+            params: [{ chainId: targetParams.chainId }],
+          });
+        } catch (err: any) {
+          if (err?.code === 4902) {
+            await window.ethereum.request({
+              method: "wallet_addEthereumChain",
+              params: [targetParams],
+            });
+          } else {
+            throw err;
+          }
+        }
+
+        await sleep(500);
+        currentChainId = targetChainId;
+      }
 
       return {
         account,
-        chainId: Number(network.chainId),
+        chainId: currentChainId,
       };
     }
 
-    /* =========================
-       🟩 Desktop / Android
-    ========================== */
-    if (!window.ethereum) {
-      throw new Error("NO_WALLET");
-    }
+    /* =====================================================
+       🟦 fallback：WalletConnect（仅无 injected 时）
+    ====================================================== */
+    console.log("[wallet] fallback to WalletConnect");
 
-    // 1️⃣ 请求授权
-    await withTimeout(
-      window.ethereum.request({
-        method: "eth_requestAccounts",
-      }),
-      10_000
-    );
+    const { signer } = await getWCSigner();
 
-    // 2️⃣ 等 accounts 真正 ready
-    const accounts = await waitForAccounts();
-    const account = accounts[0];
+    const account = await signer.getAddress();
+    const network = await signer.provider.getNetwork();
 
-    // 3️⃣ 当前链
-    const hexChainId: string = await window.ethereum.request({
-      method: "eth_chainId",
-    });
-
-    let currentChainId = parseInt(hexChainId, 16);
-
-    /* =========================
-       🎯 目标链：主网
-    ========================== */
-    const targetChainId = CHAIN_ID.BSC_MAINNET;
-    const targetParams = NETWORK_PARAMS[targetChainId];
-
-    // 4️⃣ 如有必要，切链
-    if (currentChainId !== targetChainId) {
-      try {
-        await window.ethereum.request({
-          method: "wallet_switchEthereumChain",
-          params: [{ chainId: targetParams.chainId }],
-        });
-      } catch (err: any) {
-        if (err?.code === 4902) {
-          await window.ethereum.request({
-            method: "wallet_addEthereumChain",
-            params: [targetParams],
-          });
-        } else {
-          throw err;
-        }
-      }
-
-      await sleep(500);
-      currentChainId = targetChainId;
-    }
-
-    // 5️⃣ 返回最终状态
     return {
       account,
-      chainId: currentChainId,
+      chainId: Number(network.chainId),
     };
   } finally {
     connecting = false;
