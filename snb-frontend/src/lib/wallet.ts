@@ -46,37 +46,16 @@ function withTimeout<T>(promise: Promise<T>, ms = 10_000): Promise<T> {
 }
 
 /* =========================
-   🔥 等待 injected provider
-   解决安卓 MetaMask 延迟注入问题
-========================= */
-async function waitForInjectedProvider(
-  timeout = 2000,
-  interval = 100
-): Promise<any | null> {
-  const start = Date.now();
-
-  while (Date.now() - start < timeout) {
-    if (window.ethereum) {
-      return window.ethereum;
-    }
-    await sleep(interval);
-  }
-
-  return null;
-}
-
-/* =========================
    等待 accounts ready
 ========================= */
 async function waitForAccounts(
-  provider: any,
   timeout = 8_000,
   interval = 300
 ): Promise<string[]> {
   const start = Date.now();
 
   while (Date.now() - start < timeout) {
-    const accounts: string[] = await provider.request({
+    const accounts: string[] = await window.ethereum.request({
       method: "eth_accounts",
     });
 
@@ -91,7 +70,7 @@ async function waitForAccounts(
 }
 
 /* =========================================================
-   ✅ connectWallet（终极跨端稳定版）
+   ✅ connectWallet（终极稳定版）
 ========================================================= */
 export async function connectWallet(): Promise<ConnectResult> {
   if (connecting) {
@@ -106,27 +85,25 @@ export async function connectWallet(): Promise<ConnectResult> {
 
   try {
     /* =====================================================
-       🔥 等待 injected provider（关键修复）
+       🔥 优先使用 injected provider（所有端都适用）
     ====================================================== */
-    const injected = await waitForInjectedProvider();
-
-    if (injected) {
+    if (window.ethereum) {
       console.log("[wallet] using injected provider");
 
       // 1️⃣ 请求授权
       await withTimeout(
-        injected.request({
+        window.ethereum.request({
           method: "eth_requestAccounts",
         }),
         10_000
       );
 
       // 2️⃣ 等 accounts 真正 ready
-      const accounts = await waitForAccounts(injected);
+      const accounts = await waitForAccounts();
       const account = accounts[0];
 
       // 3️⃣ 当前链
-      const hexChainId: string = await injected.request({
+      const hexChainId: string = await window.ethereum.request({
         method: "eth_chainId",
       });
 
@@ -141,13 +118,13 @@ export async function connectWallet(): Promise<ConnectResult> {
       // 4️⃣ 如有必要，切链
       if (currentChainId !== targetChainId) {
         try {
-          await injected.request({
+          await window.ethereum.request({
             method: "wallet_switchEthereumChain",
             params: [{ chainId: targetParams.chainId }],
           });
         } catch (err: any) {
           if (err?.code === 4902) {
-            await injected.request({
+            await window.ethereum.request({
               method: "wallet_addEthereumChain",
               params: [targetParams],
             });
@@ -167,8 +144,7 @@ export async function connectWallet(): Promise<ConnectResult> {
     }
 
     /* =====================================================
-       🟦 fallback：WalletConnect
-       仅在确实没有 injected 时才触发
+       🟦 fallback：WalletConnect（仅无 injected 时）
     ====================================================== */
     console.log("[wallet] fallback to WalletConnect");
 
