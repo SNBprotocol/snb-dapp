@@ -47,7 +47,6 @@ function withTimeout<T>(promise: Promise<T>, ms = 10_000): Promise<T> {
 
 /* =========================
    🔥 选择真正的 injected provider
-   解决安卓多 provider 冲突
 ========================= */
 function getInjectedProvider(): any | null {
   if (typeof window === "undefined") return null;
@@ -55,25 +54,42 @@ function getInjectedProvider(): any | null {
   const { ethereum } = window;
   if (!ethereum) return null;
 
-  // 多 provider 情况
   if (ethereum.providers && Array.isArray(ethereum.providers)) {
-    // 优先 MetaMask
     const metaMask = ethereum.providers.find(
       (p: any) => p.isMetaMask
     );
     if (metaMask) return metaMask;
 
-    // 其次 OKX
     const okx = ethereum.providers.find(
       (p: any) => p.isOkxWallet
     );
     if (okx) return okx;
 
-    // 否则返回第一个
     return ethereum.providers[0];
   }
 
   return ethereum;
+}
+
+/* =========================
+   🔥 等待 injected provider 注入
+   解决安卓线上延迟问题
+========================= */
+async function waitForInjectedProvider(
+  timeout = 2000,
+  interval = 200
+): Promise<any | null> {
+  const start = Date.now();
+
+  while (Date.now() - start < timeout) {
+    const provider = getInjectedProvider();
+    if (provider) {
+      return provider;
+    }
+    await sleep(interval);
+  }
+
+  return null;
 }
 
 /* =========================
@@ -117,9 +133,9 @@ export async function connectWallet(): Promise<ConnectResult> {
 
   try {
     /* =====================================================
-       🔥 优先使用真正的 injected provider
+       🔥 等待 injected provider 注入（关键优化）
     ====================================================== */
-    const injected = getInjectedProvider();
+    const injected = await waitForInjectedProvider();
 
     if (injected) {
       console.log("[wallet] using injected provider");
