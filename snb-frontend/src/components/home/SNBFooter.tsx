@@ -41,14 +41,14 @@ export default function SNBFooter() {
               {t("home.footer.verify")}
             </div>
             <a
-              href="https://bscscan.com"
+              href="https://bscscan.com/token/0x7cE905Eb10a94e9D6d0618A25DCDC0172Db14309"
               target="_blank"
               rel="noopener noreferrer"
             >
               BscScan
             </a>
             <a
-              href="https://github.com"
+              href="https://github.com/SNBprotocol"
               target="_blank"
               rel="noopener noreferrer"
             >
@@ -94,7 +94,7 @@ export default function SNBFooter() {
 
           {/* Discord */}
           <a
-            href="https://discord.gg/9k8SvTgwu"
+            href="https://discord.gg/MjMpz2Qg"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Discord"
