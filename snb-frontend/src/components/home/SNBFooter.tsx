@@ -94,7 +94,7 @@ export default function SNBFooter() {
 
           {/* Discord */}
           <a
-            href="https://discord.gg/MjMpz2Qg"
+            href="https://discord.gg/AuKHcuYzwJ"
             target="_blank"
             rel="noopener noreferrer"
             aria-label="Discord"
