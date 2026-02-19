@@ -9,7 +9,7 @@ import { toast } from "@/components/Toast";
 import { zapAndStake } from "@/lib/zapStake";
 import { loadZapPool } from "@/lib/zap/readPool";
 
-const MAX_ZAP_RATIO = 0.1;
+const MAX_ZAP_RATIO = 0.05;
 
 export default function ZapPage() {
   const { t } = useI18n();
