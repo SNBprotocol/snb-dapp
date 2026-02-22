@@ -18,7 +18,7 @@ import { CHAIN_ID } from "@/config/networks";
 type TxState = "idle" | "claiming" | "withdrawing" | "staking";
 
 const MIN_STAKE_BLOCKS = 900;
-const BLOCK_TIME_SEC = 2;
+const BLOCK_TIME_SEC = 0.6;
 
 /* ======================== */
 function format4(v: string) {
