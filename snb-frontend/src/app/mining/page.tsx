@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState } from "react";
 import StatCard from "@/components/StatCard";
 import {
   claimReward,
@@ -55,7 +55,7 @@ export default function MiningPage() {
   const [txState, setTxState] = useState<TxState>("idle");
   const [loading, setLoading] = useState(true);
 
-  const [stakedRaw, setStakedRaw] = useState("0"); // ⭐ 新增（避免精度坑）
+  const [stakedRaw, setStakedRaw] = useState("0");
   const [stakedDisplay, setStakedDisplay] = useState("0");
   const [pending, setPending] = useState("0");
   const [lastStakeBlock, setLastStakeBlock] = useState<number | null>(null);
@@ -66,12 +66,11 @@ export default function MiningPage() {
 
   const [currentBlock, setCurrentBlock] = useState<number | null>(null);
 
-  const listeningRef = useRef(false);
-
   /* =========================
      Reload mining state
+     ⭐ 增加 force 参数
   ========================= */
-  async function reload(silent = false) {
+  async function reload(silent = false, force = false) {
     if (!account) {
       setLoading(false);
       return;
@@ -80,7 +79,7 @@ export default function MiningPage() {
     if (!silent) setLoading(true);
 
     try {
-      const info = await loadMiningInfo(account);
+      const info = await loadMiningInfo(account, force);
 
       setStakedRaw(info.stakedRaw);
       setStakedDisplay(info.stakedDisplay);
@@ -90,14 +89,14 @@ export default function MiningPage() {
       const lp = await loadWalletLP(account);
       setWalletLP(lp);
     } catch (e) {
-      console.warn("[mining] reload failed (ignored)", e);
+      console.warn("[mining] reload failed", e);
     } finally {
       if (!silent) setLoading(false);
     }
   }
 
   /* =========================
-     Poll MAINNET block number
+     Poll block number
   ========================= */
   useEffect(() => {
     if (!account || !isCorrectNetwork) {
@@ -108,22 +107,17 @@ export default function MiningPage() {
     const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
     if (!provider) return;
 
-    let cancelled = false;
-
     const poll = async () => {
       try {
         const block = await provider.getBlockNumber();
-        if (!cancelled) setCurrentBlock(block);
+        setCurrentBlock(block);
       } catch {}
     };
 
     poll();
     const timer = setInterval(poll, 10_000);
 
-    return () => {
-      cancelled = true;
-      clearInterval(timer);
-    };
+    return () => clearInterval(timer);
   }, [account, isCorrectNetwork]);
 
   useEffect(() => {
@@ -132,6 +126,7 @@ export default function MiningPage() {
 
   /* =========================
      Claim reward
+     ⭐ 强制刷新
   ========================= */
   async function handleClaim() {
     if (txState !== "idle" || !account) return;
@@ -140,23 +135,13 @@ export default function MiningPage() {
 
     try {
       const tx = await claimReward();
+      await tx.wait();
 
       toast.success(t("tx.success"));
 
-      // ✅ 乐观更新
-      setPending("0");
+      setPending("0"); 
+      await reload(true, true);   // ⭐ 关键：force = true
 
-      const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
-      if (!provider || listeningRef.current) return;
-
-      listeningRef.current = true;
-
-      provider.once("block", () => {
-        reload(true);
-        listeningRef.current = false;
-      });
-
-      await tx.wait();
     } catch (err: any) {
       showTxError(err, t);
     } finally {
@@ -166,6 +151,7 @@ export default function MiningPage() {
 
   /* =========================
      Stake LP
+     ⭐ 强制刷新
   ========================= */
   async function handleStake() {
     if (txState !== "idle") return;
@@ -187,7 +173,7 @@ export default function MiningPage() {
 
       toast.success(t("tx.success"));
       setStakeAmount("");
-      reload();
+      reload(false, true);  // ⭐ 强制刷新
     } catch (err: any) {
       showTxError(err, t);
     } finally {
@@ -197,6 +183,7 @@ export default function MiningPage() {
 
   /* =========================
      Withdraw LP
+     ⭐ 强制刷新
   ========================= */
   async function handleWithdraw() {
     if (!canUnstake || txState !== "idle") return;
@@ -213,7 +200,7 @@ export default function MiningPage() {
 
       toast.success(t("tx.success"));
       setUnstakeAmount("");
-      reload();
+      reload(false, true);  // ⭐ 强制刷新
     } catch (err: any) {
       showTxError(err, t);
     } finally {
@@ -222,7 +209,7 @@ export default function MiningPage() {
   }
 
   /* =========================
-     Lock calculation (BigInt SAFE)
+     Lock calculation
   ========================= */
   let canUnstake = true;
   let blocksLeft = 0;
@@ -231,19 +218,23 @@ export default function MiningPage() {
   if (
     lastStakeBlock !== null &&
     currentBlock !== null &&
-    BigInt(stakedRaw) > 0n // ⭐ 精度安全
+    BigInt(stakedRaw) > 0n
   ) {
     const unlockBlock = lastStakeBlock + MIN_STAKE_BLOCKS;
 
     if (currentBlock < unlockBlock) {
       canUnstake = false;
       blocksLeft = unlockBlock - currentBlock;
-
-      minutesLeft = Math.ceil(
-        (blocksLeft * BLOCK_TIME_SEC) / 60
-      );
+      minutesLeft = Math.ceil((blocksLeft * BLOCK_TIME_SEC) / 60);
     }
   }
+
+  /* =========================
+     Dust Safe Pending
+  ========================= */
+  const pendingNum = Number(pending);
+  const displayPending =
+    pendingNum < 0.0001 ? "0" : pending;
 
   /* =========================
      Render
@@ -257,12 +248,12 @@ export default function MiningPage() {
 
       <StatCard
         title={t("mining.pendingReward")}
-        value={loading ? "-" : `${format4(pending)} SNB`}
+        value={loading ? "-" : `${format4(displayPending)} SNB`}
       />
 
       <button
         className="btn"
-        disabled={pending === "0" || txState !== "idle"}
+        disabled={pendingNum < 0.0001 || txState !== "idle"}
         onClick={handleClaim}
       >
         {txState === "claiming"
