@@ -68,14 +68,18 @@ const LP_MINING_START_BLOCK =
 ======================== */
 
 export async function loadMiningInfo(
-  user: string
+  user: string,
+  force = false   // ⭐ 新增参数
 ): Promise<MiningInfo> {
   const key = cacheKey(user);
   const now = Date.now();
 
-  const cached = miningInfoCache.get(key);
-  if (cached && now - cached.at < CACHE_TTL) {
-    return cached.data;
+  // ⭐ 只有在非强制刷新时才使用缓存
+  if (!force) {
+    const cached = miningInfoCache.get(key);
+    if (cached && now - cached.at < CACHE_TTL) {
+      return cached.data;
+    }
   }
 
   if (miningInFlight.has(key)) {
@@ -87,7 +91,7 @@ export async function loadMiningInfo(
       const chainId = CHAIN_ID.BSC_MAINNET;
       const provider = getReadProvider(chainId);
       if (!provider) {
-        return cached?.data ?? EMPTY_MINING;
+        return EMPTY_MINING;
       }
 
       const mining = new Contract(
@@ -123,7 +127,7 @@ export async function loadMiningInfo(
       return result;
     } catch (e) {
       console.warn("[mining] loadMiningInfo failed", e);
-      return cached?.data ?? EMPTY_MINING;
+      return EMPTY_MINING;
     } finally {
       miningInFlight.delete(key);
     }
@@ -300,7 +304,8 @@ export async function claimReward() {
       signer
     );
 
-    const tx = await mining.withdraw(0);
+    const tx = await mining.claim();   // ⭐ 关键修改
+
     return tx;
   } catch (err) {
     throw parseMiningTxError(err);
