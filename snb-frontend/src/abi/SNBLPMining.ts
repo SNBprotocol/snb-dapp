@@ -6,8 +6,9 @@ export const LP_MINING_ABI = [
   // user actions
   "function stake(uint256 amount)",
   "function withdraw(uint256 amount)",
+  "function claim()",              
   "function emergencyWithdraw()",
 
-  // admin (可选)
+  // admin
   "function setZap(address zap, bool allowed)"
 ];
