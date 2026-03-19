@@ -1,6 +1,7 @@
 "use client";
 
 import { useI18n } from "@/lib/i18n";
+import Link from "next/link"; 
 
 export default function SNBFooter() {
   const { t } = useI18n();
@@ -63,8 +64,9 @@ export default function SNBFooter() {
         <span>© 2026 SNB Protocol</span>
 
         <div className="footer-links">
-          <a href="/terms">Terms</a>
-          <a href="/privacy">Privacy</a>
+          {/* ✅ 改这里 */}
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
         </div>
 
         <div className="footer-social">
@@ -107,6 +109,7 @@ export default function SNBFooter() {
       </div>
 
       <style jsx>{`
+        /* 原样保留，不动UI */
         .footer-root {
           margin-top: 160px;
           padding: 72px 24px 32px;
