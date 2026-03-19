@@ -65,8 +65,8 @@ export default function SNBFooter() {
 
         <div className="footer-links">
           {/* ✅ 改这里 */}
-          <Link href="/terms">Terms</Link>
-          <Link href="/privacy">Privacy</Link>
+          <Link href="/terms" className="footer-link">Terms</Link>
+          <Link href="/privacy" className="footer-link">Privacy</Link>
         </div>
 
         <div className="footer-social">
