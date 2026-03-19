@@ -65,8 +65,8 @@ export default function SNBFooter() {
 
         <div className="footer-links">
           {/* ✅ 改这里 */}
-          <Link href="/terms" className="footer-link">Terms</Link>
-          <Link href="/privacy" className="footer-link">Privacy</Link>
+          <Link href="/terms">Terms</Link>
+          <Link href="/privacy">Privacy</Link>
         </div>
 
         <div className="footer-social">
@@ -195,14 +195,21 @@ export default function SNBFooter() {
           color: rgba(255,255,255,0.5);
         }
 
-        .footer-links a,
-        .footer-link {
+        .footer-links :global(a) {
+         display: inline-block;
          margin-right: 16px;
          font-weight: 600;
          color: rgba(255,255,255,0.6);
          text-decoration: none;
         }
 
+       .footer-links :global(a:hover) {
+        color: #facc15;
+        }
+
+       .footer-links :global(a:visited) {
+        color: rgba(255,255,255,0.6);
+        }
         .footer-social {
           display: flex;
           gap: 12px;
@@ -234,21 +241,7 @@ export default function SNBFooter() {
         .footer-social a:hover svg {
           fill: #facc15;
         }
-        .footer-link {
-            display: inline-block;
-            margin-right: 16px;
-            font-weight: 600;
-            color: rgba(255,255,255,0.6)!important;
-            text-decoration: none;
-          }
-
-          .footer-link:hover {
-            color: #facc15!important;
-          }
-
-          .footer-link:visited {
-            color: rgba(255,255,255,0.6)!important;
-          }
+        
 
         @media (max-width: 768px) {
           .footer-inner {
