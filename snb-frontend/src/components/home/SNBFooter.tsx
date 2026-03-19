@@ -265,6 +265,20 @@ export default function SNBFooter() {
           .footer-social {
             justify-content: center;
           }
+          .footer-link {
+            margin-right: 16px;
+            font-weight: 600;
+            color: rgba(255,255,255,0.6);
+            text-decoration: none;
+          }
+
+          .footer-link:hover {
+            color: #facc15;
+          }
+
+          .footer-link:visited {
+            color: rgba(255,255,255,0.6);
+          }
         }
       `}</style>
     </footer>
