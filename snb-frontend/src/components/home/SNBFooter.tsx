@@ -195,11 +195,12 @@ export default function SNBFooter() {
           color: rgba(255,255,255,0.5);
         }
 
-        .footer-links a {
-          margin-right: 16px;
-          font-weight: 600;
-          color: rgba(255,255,255,0.6);
-          text-decoration: none;
+        .footer-links a,
+        .footer-link {
+         margin-right: 16px;
+         font-weight: 600;
+         color: rgba(255,255,255,0.6);
+         text-decoration: none;
         }
 
         .footer-social {
@@ -234,18 +235,19 @@ export default function SNBFooter() {
           fill: #facc15;
         }
         .footer-link {
+            display: inline-block;
             margin-right: 16px;
             font-weight: 600;
-            color: rgba(255,255,255,0.6);
+            color: rgba(255,255,255,0.6)!important;
             text-decoration: none;
           }
 
           .footer-link:hover {
-            color: #facc15;
+            color: #facc15!important;
           }
 
           .footer-link:visited {
-            color: rgba(255,255,255,0.6);
+            color: rgba(255,255,255,0.6)!important;
           }
 
         @media (max-width: 768px) {
