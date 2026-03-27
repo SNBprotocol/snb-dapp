@@ -63,8 +63,9 @@ export default function ReferralPage() {
       return;
     }
 
+    // 👉 节流（防短时间重复请求）
     const now = Date.now();
-    if (now - lastLoadRef.current < 2000) return;
+    if (now - lastLoadRef.current < 3000) return;
     lastLoadRef.current = now;
 
     if (loadingRef.current) return;
@@ -110,6 +111,8 @@ export default function ReferralPage() {
 
       setInput("");
       resetReferralCache(account!);
+
+      // ✅ bind后刷新一次（允许）
       setTimeout(load, 800);
     } catch {
       toast.error(safeT("tx.failed", "Transaction failed"));
@@ -118,21 +121,26 @@ export default function ReferralPage() {
     }
   }
 
+  // ✅ 页面打开加载
   useEffect(() => {
     if (!account) return;
     load();
   }, [account]);
 
-  // 🔥 自动刷新（Graph优化）
+  // ✅ 切回页面刷新（核心优化）
   useEffect(() => {
-    if (!account) return;
+    function handleVisibility() {
+      if (document.visibilityState === "visible") {
+        load();
+      }
+    }
 
-    const interval = setInterval(() => {
-      load();
-    }, 8000);
+    document.addEventListener("visibilitychange", handleVisibility);
 
-    return () => clearInterval(interval);
-  }, [account, load]);
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibility);
+    };
+  }, [load]);
 
   const level1ToShow = level1.length <= 10 ? level1 : level1.slice(-10);
   const level2ToShow = level2.length <= 10 ? level2 : level2.slice(-10);
@@ -259,7 +267,7 @@ export default function ReferralPage() {
         ))}
       </div>
 
-      {/* ✅ 奖励说明（已恢复） */}
+      {/* ✅ 奖励说明（完整保留） */}
       <div
         style={{
           marginTop: 32,
