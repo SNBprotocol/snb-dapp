@@ -1,4 +1,4 @@
-import { Contract, getAddress, ethers } from "ethers";
+import { Contract, getAddress, ethers, JsonRpcProvider } from "ethers";
 import ReferralRegistryAbi from "@/abi/ReferralRegistry";
 import RewardDistributorAbi from "@/abi/RewardDistributor";
 import {
@@ -7,6 +7,7 @@ import {
 } from "@/config/contracts";
 import { CHAIN_ID } from "@/config/networks";
 import { getReadProvider, getSigner } from "@/lib/providers";
+import { RPC_URLS } from "@/config/rpc";
 
 /* =========================
    Types
@@ -33,88 +34,20 @@ export type ReferralRewardStats = {
 };
 
 /* =========================
-   Referral Network Cache
+   Graph Config
 ========================= */
 
-const CACHE_TTL = 30_000;
+const GRAPH_URL =
+  "https://api.studio.thegraph.com/query/1745272/snb-referral/v0.0.1";
+
+/* =========================
+   Cache
+========================= */
+
 const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
-const LOG_CHUNK_SIZE = 5000;
-const LOOKBACK_BLOCKS = 120_000;
-
-/* =========================
-   Reward Persistent Cache
-========================= */
-
-type RewardCacheItem = {
-  lastScannedBlock: number;
-  total: bigint;
-  level1: bigint;
-  level2: bigint;
-  history: ReferralRewardHistoryItem[];
-};
-
-const referralRewardCache = new Map<string, RewardCacheItem>();
-
-/* =========================
-   localStorage helpers
-========================= */
-
-function getStorageKey(chainId: number, user: string) {
-  return `snb_referral_reward_${chainId}_${user.toLowerCase()}`;
-}
-
-function saveToStorage(
-  chainId: number,
-  user: string,
-  item: RewardCacheItem
-) {
-  if (typeof window === "undefined") return;
-
-  const serializable = {
-    lastScannedBlock: item.lastScannedBlock,
-    total: item.total.toString(),
-    level1: item.level1.toString(),
-    level2: item.level2.toString(),
-    history: item.history.map((h) => ({
-      ...h,
-      amount: h.amount.toString(),
-    })),
-  };
-
-  localStorage.setItem(
-    getStorageKey(chainId, user),
-    JSON.stringify(serializable)
-  );
-}
-
-function loadFromStorage(
-  chainId: number,
-  user: string
-): RewardCacheItem | null {
-  if (typeof window === "undefined") return null;
-
-  const raw = localStorage.getItem(getStorageKey(chainId, user));
-  if (!raw) return null;
-
-  try {
-    const parsed = JSON.parse(raw);
-
-    return {
-      lastScannedBlock: parsed.lastScannedBlock,
-      total: BigInt(parsed.total),
-      level1: BigInt(parsed.level1),
-      level2: BigInt(parsed.level2),
-      history: parsed.history.map((h: any) => ({
-        ...h,
-        amount: BigInt(h.amount),
-      })),
-    };
-  } catch {
-    return null;
-  }
-}
+const CACHE_TTL = 30_000;
 
 /* =========================
    Helpers
@@ -133,20 +66,15 @@ async function getActiveChainId(provider: any): Promise<number> {
    Load referral network
 ========================= */
 
-export async function loadReferral(
-  user: string
-): Promise<ReferralData> {
+export async function loadReferral(user: string): Promise<ReferralData> {
   const now = Date.now();
   const key = user.toLowerCase();
 
-  const hit = cache.get(key);
-  if (hit && now - hit.at < CACHE_TTL) {
-    return hit.data;
+  if (cache.get(key) && now - cache.get(key)!.at < CACHE_TTL) {
+    return cache.get(key)!.data;
   }
 
-  if (inFlight.has(key)) {
-    return inFlight.get(key)!;
-  }
+  if (inFlight.has(key)) return inFlight.get(key)!;
 
   const task = (async () => {
     try {
@@ -172,17 +100,13 @@ export async function loadReferral(
 
       const level1 = rawLevel1.map(getAddress);
 
-      const level2: string[] = [];
+      const subsList = await Promise.all(
+        level1.map((addr) =>
+          registry.getDirectReferrals(addr).catch(() => [])
+        )
+      );
 
-      for (const addr of level1) {
-        try {
-          const subs: string[] =
-            await registry.getDirectReferrals(addr);
-          for (const s of subs) {
-            level2.push(getAddress(s));
-          }
-        } catch {}
-      }
+      const level2 = subsList.flat().map(getAddress);
 
       const result: ReferralData = { referrer, level1, level2 };
       cache.set(key, { data: result, at: Date.now() });
@@ -227,17 +151,51 @@ export async function bindReferrer(referrer: string) {
   return signer.sendTransaction(tx);
 }
 
-/* =========================================================
-   Referral reward stats (PERSISTENT INCREMENTAL VERSION)
-========================================================= */
+/* =========================
+   🟢 Graph 查询
+========================= */
 
-export async function loadReferralRewardsFinal(
+async function fetchFromGraph(user: string) {
+  try {
+    const res = await fetch(GRAPH_URL, {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        query: `
+        {
+          referralRewards(
+            first: 1000
+            where: { referrer: "${user.toLowerCase()}" }
+            orderBy: blockNumber
+            orderDirection: desc
+          ) {
+            user
+            amount
+            level
+            blockNumber
+          }
+        }
+      `,
+      }),
+    });
+
+    const json = await res.json();
+    return json.data?.referralRewards || [];
+  } catch (e) {
+    console.warn("Graph fetch failed", e);
+    return null;
+  }
+}
+
+/* =========================
+   🟡 RPC fallback（保底）
+========================= */
+
+async function loadReferralRewardsFallback(
   user: string
 ): Promise<ReferralRewardStats> {
-  if (!ethers.isAddress(user)) {
-    return { total: 0n, level1: 0n, level2: 0n, history: [] };
-  }
-
   const provider = getReadProvider(CHAIN_ID.BSC_MAINNET);
   if (!provider) {
     return { total: 0n, level1: 0n, level2: 0n, history: [] };
@@ -261,91 +219,102 @@ export async function loadReferralRewardsFinal(
 
   const paddedUser = ethers.zeroPadValue(user, 32);
 
-  const key = user.toLowerCase();
+  let total = 0n;
+  let level1 = 0n;
+  let level2 = 0n;
 
-  let cacheItem =
-    referralRewardCache.get(key) ||
-    loadFromStorage(chainId, user);
+  const history: ReferralRewardHistoryItem[] = [];
 
-  let from: number;
+  try {
+    const logs = await provider.getLogs({
+      address: distributor,
+      topics: [topic0, paddedUser],
+      fromBlock: startBlock,
+      toBlock: latest,
+    });
 
-  if (!cacheItem) {
-    const safeStart = Math.max(startBlock, latest - LOOKBACK_BLOCKS);
+    for (const log of logs) {
+      const e = iface.parseLog(log);
 
-    cacheItem = {
-      lastScannedBlock: safeStart - 1,
-      total: 0n,
-      level1: 0n,
-      level2: 0n,
-      history: [],
-    };
+      const amount = e.args.amount as bigint;
+      const level = Number(e.args.level);
 
-    referralRewardCache.set(key, cacheItem);
-    from = safeStart;
-  } else {
-    referralRewardCache.set(key, cacheItem);
-    from = cacheItem.lastScannedBlock + 1;
-  }
+      total += amount;
+      if (level === 1) level1 += amount;
+      if (level === 2) level2 += amount;
 
-  if (from > latest) {
-    return {
-      total: cacheItem.total,
-      level1: cacheItem.level1,
-      level2: cacheItem.level2,
-      history: cacheItem.history.slice(0, 20),
-    };
-  }
-
-  while (from <= latest) {
-    const to = Math.min(from + LOG_CHUNK_SIZE - 1, latest);
-
-    try {
-      const logs = await provider.getLogs({
-        address: distributor,
-        topics: [topic0, paddedUser],
-        fromBlock: from,
-        toBlock: to,
+      history.push({
+        user,
+        amount,
+        level,
+        blockNumber: log.blockNumber,
       });
-
-      for (const log of logs) {
-        try {
-          const e = iface.parseLog(log);
-
-          const amount = e.args.amount as bigint;
-          const level = Number(e.args.level);
-
-          cacheItem.total += amount;
-
-          if (level === 1) cacheItem.level1 += amount;
-          if (level === 2) cacheItem.level2 += amount;
-
-          cacheItem.history.unshift({
-            user,
-            amount,
-            level,
-            blockNumber: log.blockNumber,
-          });
-        } catch {}
-      }
-    } catch {}
-
-    from = to + 1;
+    }
+  } catch (e) {
+    console.warn("fallback failed", e);
   }
-
-  cacheItem.lastScannedBlock = latest;
-
-  saveToStorage(chainId, user, cacheItem);
 
   return {
-    total: cacheItem.total,
-    level1: cacheItem.level1,
-    level2: cacheItem.level2,
-    history: cacheItem.history.slice(0, 20),
+    total,
+    level1,
+    level2,
+    history: history.slice(0, 20),
   };
 }
 
 /* =========================
-   Manual reset
+   🎯 最终入口（核心）
+========================= */
+
+export async function loadReferralRewardsFinal(
+  user: string
+): Promise<ReferralRewardStats> {
+  if (!ethers.isAddress(user)) {
+    return { total: 0n, level1: 0n, level2: 0n, history: [] };
+  }
+
+  // 🟢 优先 Graph（秒级）
+  const graphData = await fetchFromGraph(user);
+
+  if (graphData && graphData.length > 0) {
+    let total = 0n;
+    let level1 = 0n;
+    let level2 = 0n;
+
+    const history: ReferralRewardHistoryItem[] = [];
+
+    for (const item of graphData) {
+      const amount = BigInt(item.amount);
+      const level = Number(item.level);
+
+      total += amount;
+      if (level === 1) level1 += amount;
+      if (level === 2) level2 += amount;
+
+      history.push({
+        user: item.user,
+        amount,
+        level,
+        blockNumber: Number(item.blockNumber),
+      });
+    }
+
+    return {
+      total,
+      level1,
+      level2,
+      history: history.slice(0, 20),
+    };
+  }
+
+  // 🟡 fallback
+  console.warn("⚠️ Graph empty → fallback RPC");
+
+  return await loadReferralRewardsFallback(user);
+}
+
+/* =========================
+   Reset
 ========================= */
 
 export function resetReferralCache(user?: string) {
@@ -353,10 +322,8 @@ export function resetReferralCache(user?: string) {
     const key = user.toLowerCase();
     cache.delete(key);
     inFlight.delete(key);
-    referralRewardCache.delete(key);
   } else {
     cache.clear();
     inFlight.clear();
-    referralRewardCache.clear();
   }
 }
