@@ -16,7 +16,6 @@ function short(addr: string) {
   return addr.slice(0, 6) + "..." + addr.slice(-4);
 }
 
-// SNB 显示格式（最多 3 位小数）
 function formatSNB(value: bigint, decimals = 3) {
   const str = ethers.formatEther(value);
   const [int, dec = ""] = str.split(".");
@@ -40,7 +39,9 @@ export default function ReferralPage() {
 
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
+
   const loadingRef = useRef(false);
+  const lastLoadRef = useRef(0);
 
   const isBound = !!referrer && referrer !== ethers.ZeroAddress;
 
@@ -49,9 +50,6 @@ export default function ReferralPage() {
     return v === key ? fallback : v;
   }
 
-  /**
-   * 🔧 修复 1：钱包切换时，立即清空旧奖励，防止串号
-   */
   useEffect(() => {
     setRewardStats(null);
   }, [account]);
@@ -65,6 +63,10 @@ export default function ReferralPage() {
       return;
     }
 
+    const now = Date.now();
+    if (now - lastLoadRef.current < 2000) return;
+    lastLoadRef.current = now;
+
     if (loadingRef.current) return;
     loadingRef.current = true;
 
@@ -75,6 +77,7 @@ export default function ReferralPage() {
       setLevel2(data.level2 || []);
 
       const rewards = await loadReferralRewardsFinal(account);
+
       setRewardStats({
         total: rewards.total,
         level1: rewards.level1,
@@ -107,7 +110,7 @@ export default function ReferralPage() {
 
       setInput("");
       resetReferralCache(account!);
-      setTimeout(load, 600);
+      setTimeout(load, 800);
     } catch {
       toast.error(safeT("tx.failed", "Transaction failed"));
     } finally {
@@ -116,8 +119,20 @@ export default function ReferralPage() {
   }
 
   useEffect(() => {
+    if (!account) return;
     load();
-  }, [load]);
+  }, [account]);
+
+  // 🔥 自动刷新（Graph优化）
+  useEffect(() => {
+    if (!account) return;
+
+    const interval = setInterval(() => {
+      load();
+    }, 8000);
+
+    return () => clearInterval(interval);
+  }, [account, load]);
 
   const level1ToShow = level1.length <= 10 ? level1 : level1.slice(-10);
   const level2ToShow = level2.length <= 10 ? level2 : level2.slice(-10);
@@ -176,14 +191,16 @@ export default function ReferralPage() {
         </div>
       )}
 
-      {/* ✅ Referral Rewards（加业务判断，防止错误显示） */}
-      {rewardStats && (level1.length > 0 || level2.length > 0) && (
-        <div className="card">
-          <div className="card-title">
-            {t("referral.rewardsCardTitle")}
-          </div>
+      {/* 推荐奖励 */}
+      <div className="card">
+        <div className="card-title">
+          {t("referral.rewardsCardTitle")}
+        </div>
 
-          <div className="card-value" style={{ fontSize: 14, lineHeight: "1.7" }}>
+        {!rewardStats ? (
+          <div className="muted">Loading rewards...</div>
+        ) : (
+          <div style={{ fontSize: 14, lineHeight: "1.7" }}>
             <div>
               {t("referral.rewardsTotal")}:{" "}
               {formatSNB(rewardStats.total)} SNB
@@ -202,11 +219,17 @@ export default function ReferralPage() {
               {t("referral.rewardsLevel2")}{" "}
               {formatSNB(rewardStats.level2)} SNB
             </div>
-          </div>
-        </div>
-      )}
 
-      {/* 一级下级 */}
+            {rewardStats.total === 0n && (
+              <div style={{ marginTop: 8, color: "#888" }}>
+                Waiting for referrals to generate rewards...
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* 一级 */}
       <div className="card">
         <div className="card-title">
           {t("referral.level1Title")} ({level1.length})
@@ -217,13 +240,11 @@ export default function ReferralPage() {
         )}
 
         {level1ToShow.map((a) => (
-          <div key={a} className="list-item">
-            {short(a)}
-          </div>
+          <div key={a}>{short(a)}</div>
         ))}
       </div>
 
-      {/* 二级下级 */}
+      {/* 二级 */}
       <div className="card">
         <div className="card-title">
           {t("referral.level2Title")} ({level2.length})
@@ -234,13 +255,11 @@ export default function ReferralPage() {
         )}
 
         {level2ToShow.map((a) => (
-          <div key={a} className="list-item">
-            {short(a)}
-          </div>
+          <div key={a}>{short(a)}</div>
         ))}
       </div>
 
-      {/* 推荐奖励说明 */}
+      {/* ✅ 奖励说明（已恢复） */}
       <div
         style={{
           marginTop: 32,
