@@ -1,4 +1,4 @@
-import { Contract, getAddress, ethers, JsonRpcProvider } from "ethers";
+import { Contract, getAddress, ethers } from "ethers";
 import ReferralRegistryAbi from "@/abi/ReferralRegistry";
 import RewardDistributorAbi from "@/abi/RewardDistributor";
 import {
@@ -7,7 +7,6 @@ import {
 } from "@/config/contracts";
 import { CHAIN_ID } from "@/config/networks";
 import { getReadProvider, getSigner } from "@/lib/providers";
-import { RPC_URLS } from "@/config/rpc";
 
 /* =========================
    Types
@@ -41,13 +40,21 @@ const GRAPH_URL =
   "https://api.studio.thegraph.com/query/1745272/snb-referral/v0.0.1";
 
 /* =========================
-   Cache
+   Cache（新增 Graph缓存🔥）
 ========================= */
 
 const cache = new Map<string, { data: ReferralData; at: number }>();
 const inFlight = new Map<string, Promise<ReferralData>>();
 
 const CACHE_TTL = 30_000;
+
+// 👉 Graph缓存（关键）
+const graphCache = new Map<
+  string,
+  { data: any; at: number }
+>();
+
+const GRAPH_CACHE_TTL = 10000; // 10秒
 
 /* =========================
    Helpers
@@ -152,10 +159,18 @@ export async function bindReferrer(referrer: string) {
 }
 
 /* =========================
-   🟢 Graph 查询
+   🟢 Graph 查询（已加缓存🔥）
 ========================= */
 
 async function fetchFromGraph(user: string) {
+  const key = user.toLowerCase();
+
+  // 👉 命中缓存
+  const hit = graphCache.get(key);
+  if (hit && Date.now() - hit.at < GRAPH_CACHE_TTL) {
+    return hit.data;
+  }
+
   try {
     const res = await fetch(GRAPH_URL, {
       method: "POST",
@@ -166,8 +181,8 @@ async function fetchFromGraph(user: string) {
         query: `
         {
           referralRewards(
-            first: 1000
-            where: { referrer: "${user.toLowerCase()}" }
+            first: 100
+            where: { referrer: "${key}" }
             orderBy: blockNumber
             orderDirection: desc
           ) {
@@ -182,7 +197,16 @@ async function fetchFromGraph(user: string) {
     });
 
     const json = await res.json();
-    return json.data?.referralRewards || [];
+
+    const data = json.data?.referralRewards || [];
+
+    // 👉 写入缓存
+    graphCache.set(key, {
+      data,
+      at: Date.now(),
+    });
+
+    return data;
   } catch (e) {
     console.warn("Graph fetch failed", e);
     return null;
@@ -263,7 +287,7 @@ async function loadReferralRewardsFallback(
 }
 
 /* =========================
-   🎯 最终入口（核心）
+   🎯 最终入口
 ========================= */
 
 export async function loadReferralRewardsFinal(
@@ -273,7 +297,6 @@ export async function loadReferralRewardsFinal(
     return { total: 0n, level1: 0n, level2: 0n, history: [] };
   }
 
-  // 🟢 优先 Graph（秒级）
   const graphData = await fetchFromGraph(user);
 
   if (graphData && graphData.length > 0) {
@@ -307,10 +330,15 @@ export async function loadReferralRewardsFinal(
     };
   }
 
-  // 🟡 fallback
-  console.warn("⚠️ Graph empty → fallback RPC");
+  console.warn("⚠️ Graph not ready, skip fallback");
 
-  return await loadReferralRewardsFallback(user);
+// 👉 直接返回空（不扫链）
+return {
+  total: 0n,
+  level1: 0n,
+  level2: 0n,
+  history: [],
+};
 }
 
 /* =========================
@@ -322,8 +350,10 @@ export function resetReferralCache(user?: string) {
     const key = user.toLowerCase();
     cache.delete(key);
     inFlight.delete(key);
+    graphCache.delete(key); // 👉 清Graph缓存
   } else {
     cache.clear();
     inFlight.clear();
+    graphCache.clear();
   }
 }
