@@ -13,5 +13,7 @@ export const RPC_URLS: Record<number, string[]> = {
     "https://bsc.publicnode.com",
     "https://bsc-dataseed.binance.org",
     "https://bsc-dataseed1.binance.org",
+    "https://rpc.ankr.com/bsc",
+    "https://bsc.meowrpc.com",
   ],
 };
